@@ -1,0 +1,449 @@
+---
+title: "Baseball Pitch Charts"
+author: "Himanshu Panwar"
+date: "July 28, 2016"
+output: html_document
+---
+
+
+## Extracting PITCHf/x Data
+### Introduction
+
+
+PITCHf/x, created and maintained by Sportvision, is a system that tracks the speeds and trajectories of pitched baseballs. This system, which made its debut in the 2006 MLB playoffs, is installed in every MLB stadium [wiki](https://en.wikipedia.org/wiki/PITCHf/x).
+
+We will make pitch location charts, visulaize lots of charts which will include: 
+
+* where pitches were thrown? 
+* what kind of pitches they were? 
+* how fast they were? 
+* who the batter was? 
+* what the inning was? 
+* the order in which pitches were thrown and 
+* whether the batter was left handed or right handed?
+
+
+We will pick a game: Pittsburgh Pirates Vs Washington Nationals - June 20th, 2015. There's a [youtube video](https://www.youtube.com/watch?v=-iQr5-rD8PY), watch it after visualization.
+
+Luckily, the dataset is available. Here's the [link](http://gd2.mlb.com/components/game/mlb/). If we go deeper we will get xml file. R provides us a very nice package that will scrape the data for us and setup dataframe to use.
+
+So, let's get started with coding.
+
+### Scraping the Data
+The package is  "pitchRx". Install the package and load it. Then to scrape the data, the function we need is scrape() and put the game id.<br>
+Then get the datasets available to use from the bdata. 'atbat' and 'pitch' are the one we are interested in.
+
+
+```{r eval=FALSE}
+install.packages('pitchRx')
+```
+```{r message=FALSE}
+library(pitchRx)
+
+#store in a variable
+bdata <- scrape(game.ids = "gid_2015_06_20_pitmlb_wasmlb_1")
+
+#get the datasets
+names(bdata)
+```
+
+Explore the dataset:
+
+```{r}
+#Atbat Datset
+head(bdata$atbat)
+
+#pitch Dataset
+head(bdata$pitch)
+```
+
+Why to use bdata$ again and again. Let's put both into new variables.
+```{r}
+atbat <- bdata$atbat
+pitch <- bdata$pitch
+```
+
+### Joining atbat and pitch Dataframes
+
+Why we are joining the two datasets? Because I want to know like, if I have a particular pitch, then who the batter was? and this information we will get from atbat dataframe.
+
+Looking the datasets above. We can see a column 'num' that is common to both.
+'num' gives unique number to each atbat in the game.
+
+So, now we will first join the two dataframes by 'num'. To do this we'll bring dplyr package.
+```{r message=FALSE}
+library(dplyr)
+
+#store into new variable
+nh <- inner_join(atbat, pitch, by="num")
+```
+
+If you want to know what the columns means : <br>
+Click [Here](https://fastballs.wordpress.com/2007/08/02/glossary-of-the-gameday-pitch-fields/)
+
+### Choosing Columns we are interested in
+
+To get the column names we use:
+```{r}
+names(atbat)
+names(pitch)
+```
+Now we will see which one to pick from atbat dataframe.
+
+We are only interested in 'top' inning_side.
+So we will filter out that first and then select the columns.
+
+```{r}
+nh <- inner_join(atbat, pitch, by="num")%>%
+  filter(inning_side.x=='top')%>%
+  select(num,start_tfs,stand,event,inning.x,batter_name,des,tfs,start_speed,px,pz,pitch_type)
+
+#Take a look
+head(nh)
+```
+
+
+
+##Visualizations
+
+Now that we have build our dataframe. It's time to do some visualization.
+
+### The Strike Zone
+
+First we'll built the strike zone. Strike Zone varies from batter to batter as it depends on batter's height. So we will take average of strike zone area.<br>
+We will have 1.9*1.9 area of strike zone, and we will look it as catcher's view who stands behind the batter. <br>
+As shown in image.
+
+![Strike Zone](/home/agent07/R/Udemy Pitch Location/markdown/strike_zone.jpg)
+
+
+### Drawing the strike zone
+
+First, we will make x coordinate vector and z coordinate vector and will combine them both to make dataframe.
+
+```{r}
+x <- c(-.95,.95,.95,-.95,-.95)
+z <- c(1.6,1.6,3.5,3.5,1.6)
+
+#store in dataframe
+sz <- data_frame(x,z) 
+```
+
+Now, we will use ggplot to make the strike zone.
+px and pz will be useful for pitches location(coordinate) and we will start_speed for the size of the pitch.
+
+```{r}
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = nh,aes(x=px,y=pz,size=start_speed))+
+  scale_size(range = c(0.01,3))
+```
+
+Now, we will differentiate pitches by pitch_type whether pitch was fastball or slider or changeup etc.
+
+```{r}
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = nh,aes(x=px,y=pz,size=start_speed, color=pitch_type))+
+  scale_size(range = c(0.01,3))
+```
+
+Ok, this looks cool. But we got abbrevations of pitch_type instead of full description.<br>
+So, we will change that to full description.
+
+First we need to search the pitch_type and change it to its full name.
+
+```{r}
+#store pitch_type in new variable
+pitch_desc <- nh$pitch_type
+
+#search abbr. and change to full name
+pitch_desc[which(pitch_desc=='FF')] <- "four-seam fastball"
+pitch_desc[which(pitch_desc=='SL')] <- "slider"
+pitch_desc[which(pitch_desc=='FC')] <- "fastball cutter"
+pitch_desc[which(pitch_desc=='CU')] <- "curveball"
+pitch_desc[which(pitch_desc=='CH')] <- "changeup"
+
+#Add new column to the dataframe
+nh$pitch_desc <- pitch_desc
+```
+
+Now, change pitch_type to pitch_desc
+
+```{r}
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = nh,aes(x=px,y=pz,size=start_speed, color=pitch_desc))+
+  scale_size(range = c(0.01,3))
+```
+
+Now, that looks more informative.
+
+## Working with Colors
+
+### Changing Hue
+
+```{r}
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = nh,aes(x=px,y=pz,size=start_speed, color=pitch_desc))+
+  scale_size(range = c(0.005,2.5))+
+  scale_color_hue(h=c(180,0), c=100, l=50)
+```
+
+### Manual Coloring
+
+```{r}
+#pitch type visualization
+#Manual Color Specification
+
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = nh,aes(x=px,y=pz,size=start_speed, color=pitch_desc))+
+  scale_size(range = c(0.005,2.5))+
+  scale_color_manual(values = c('green','blue','pink','red','black'))
+```
+
+### Faceting
+
+Now we are interested in right hand and left hand batter. We want 'L' for left handed and 'R'for right handed on the plot.
+
+We will use stand to do that. We will put Left handed on 1.5 x-axis and R on -1.5, keep in mind we are the catcher.
+
+```{r}
+#Store stand in new variable
+stand_xcoord <- nh$stand
+
+#Initialize
+stand_xcoord[which(stand_xcoord=='L')] <- 1.5
+stand_xcoord[which(stand_xcoord=='R')] <- -1.5
+
+#change to numeric
+stand_xcoord <- as.numeric(stand_xcoord)
+
+#Create new column in dataframe
+nh$stand_xcoord <- stand_xcoord
+```
+
+Now we will plot text using geom_text.
+
+```{r}
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = nh,aes(x=px,y=pz,size=start_speed, color=pitch_desc))+
+  scale_size(range = c(0.005,2.5))+
+  scale_color_manual(values = c('red','blue','green','yellow','black'))+
+  facet_wrap(~stand)+
+  geom_text(data = nh,aes(label=stand, x = stand_xcoord),y=2.5,size=6)
+```
+
+Now, we are interested in plotting batter name and inning on the plot.
+
+```{r}
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = nh,aes(x=px,y=pz,size=start_speed, color=pitch_desc))+
+  scale_size(range = c(0.005,2.5))+
+  scale_color_manual(values = c('green','blue','yellow','red','black'))+
+  facet_wrap(~num)+
+  geom_text(data = nh,aes(label=stand, x = stand_xcoord),y=2.5,size=4)+
+  geom_text(data = nh,aes(label=batter_name),x=0,y=0.5,size=2.5)+
+  geom_text(data = nh,aes(label=inning.x),x=0,y=4.5,size=2.2)
+```
+
+## At-Bat
+
+Now, we will plot pitches of specific batter and specific inning.
+
+```{r}
+#Specific Batter and inning
+
+batter <- "Pedro Alvarez"
+inning <- 5
+
+#create atbat dataframe
+ab <- nh%>%filter(batter_name==batter, inning.x==inning)
+```
+
+Plot the inning and batter name as the title of the plot
+
+```{r}
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = ab,aes(x=px,y=pz,size=start_speed, color=pitch_desc))+
+  scale_size(range = c(0.005,2.5))+
+  scale_color_manual(values = c('black','blue','red','yellow','green'))+
+  geom_text(data = ab,aes(label=stand, x = stand_xcoord),y=2.5,size=5)+
+  xlim(-2,2)+
+  ylim(0,4.5)+
+  ggtitle(paste("Inning",inning," | ",batter))
+```
+
+Next, we want label to the pitches, as what happened to that pitch? We will get that information from 'des' column.
+
+```{r}
+#labelling pitches
+
+des <- nh$des
+event <- nh$event
+
+#This is use because instead of "In play" as des we need what exactly happened.
+des[which(des=='In play, out(s)')] <- event[which(des=='In play, out(s)')]
+nh$des2 <- des
+
+ab <- nh%>%filter(batter_name==batter, inning.x==inning)
+```
+
+Now plot the data.
+
+```{r}
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = ab,aes(x=px,y=pz,size=start_speed, color=pitch_desc))+
+  scale_size(range = c(0.005,2.5))+
+  scale_color_manual(values = c('black','blue','red','yellow','green'))+
+  geom_text(data = ab,aes(label=stand, x = stand_xcoord),y=2.5,size=5)+
+  xlim(-2,2)+
+  ylim(0,4.5)+
+  ggtitle(paste("Inning",inning," | ",batter))+
+  geom_text(data = ab, aes(label=des2, x=px, y=pz),size=2.5, vjust=2)
+```
+
+Now, that's what we wanted. great!!!
+
+Next, we want numbering to the pitches, which one was first? which second?..and so on.
+We will use 'tfs' column for the numbering.
+
+```{r}
+#Counting number of pitches in an atbat
+
+nh <- nh%>%
+  arrange(tfs)
+
+temp <- nh%>%
+  group_by(num)%>%
+  summarise(num_of_pitches <- n())
+
+pitch_enum <- unlist(lapply(temp$`num_of_pitches <- n()`,seq))
+nh$pitch_enum <- pitch_enum
+```
+
+Now plot the data. Visulaize Pitch Enumeration
+
+```{r}
+#visualize pitch enum
+
+#Specific Batter and inning
+
+batter <- "Jose Tabata"
+inning <- 9
+
+#create atbat dataframe
+ab <- nh%>%filter(batter_name==batter, inning.x==inning)
+
+
+ggplot()+
+  geom_path(data = sz, aes(x=x, y=z))+
+  coord_equal()+
+  xlab("feet from home plate")+
+  ylab("feet above the ground")+
+  geom_point(data = ab,aes(x=px,y=pz,size=start_speed, color=pitch_desc))+
+  scale_size(range = c(0.005,2.5))+
+  scale_color_manual(values = c('violet','red','black','yellow','green'))+
+  geom_text(data = ab,aes(label=stand, x = stand_xcoord),y=2.5,size=5)+
+  xlim(-2,2)+
+  ylim(0,4.5)+
+  ggtitle(paste("Inning",inning," | ",batter))+
+  geom_text(data = ab, aes(label=des2, x=px, y=pz),size=2.5, vjust=2)+
+  geom_text(data = ab, aes(label=pitch_enum, x=px, y=pz),size=2.5, vjust=-1.2)
+```
+
+## Slide Show
+
+Now we want to plot like above for every batter and will save the image.
+
+First we will specify the colors for pitch description, so that colors are same for particular description in every plot.
+
+```{r}
+
+colors <- c("red","blue","orange","green","purple")
+names(colors) <- c('four-seam fastball','slider','fastball cutter','curveball','changeup')
+
+```
+
+Next, using for loop we will save plot of every batter using gsave().
+
+```{r message=FALSE}
+#Specific Batter and inning
+for(i in unique(nh$num)){
+
+    
+    #create atbat dataframe
+    ab <- nh%>%filter(num==i)
+    
+    batter <- ab$batter_name[1]
+    inning <- ab$inning.x[1]
+    
+    pitches <- unique(ab$pitch_desc)
+    
+    #Speed Size should be same in every plot
+    zmax <-(max(ab$start_speed)-75.4)/22
+    zmin <-(min(ab$start_speed)-75.4)/22
+    
+    plot <- ggplot()+
+      geom_path(data = sz, aes(x=x, y=z))+
+      coord_equal()+
+      xlab("feet from home plate")+
+      ylab("feet above the ground")+
+      geom_point(data = ab,aes(x=px,y=pz,size=start_speed, color=pitch_desc))+
+      scale_size(range = c(2.495*zmin+0.005,2.495*zmax+0.005))+
+      scale_color_manual(values = colors[pitches])+
+      geom_text(data = ab,aes(label=stand, x = stand_xcoord),y=2.5,size=5)+
+      xlim(-2,2)+
+      ylim(0,5)+
+      ggtitle(paste("Inning",inning," | ",batter))+
+      geom_text(data = ab, aes(label=des2, x=px, y=pz),size=2.5, vjust=2)+
+      geom_text(data = ab, aes(label=pitch_enum, x=px, y=pz),size=2.5, vjust=-1.2)
+    
+    ggsave(paste("atbat",i,".png",sep = ""), plot)
+}
+```
+
+## Wrap Up.
+
+Now we will look at some some of the plots we saved as image.
+
+                                               
+![atbat20](atbat20.png)  ![atbat29](atbat29.png)
+![atbat51](atbat51.png)  ![atbat59](atbat59.png)
+
+
+
+
