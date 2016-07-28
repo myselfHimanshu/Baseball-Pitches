@@ -114,7 +114,7 @@ First we'll built the strike zone. Strike Zone varies from batter to batter as i
 We will have 1.9*1.9 area of strike zone, and we will look it as catcher's view who stands behind the batter. <br>
 As shown in image.
 
-![Strike Zone](/home/agent07/R/Udemy Pitch Location/markdown/strike_zone.jpg)
+![Strike Zone](https://github.com/myselfHimanshu/Baseball-Pitches/blob/master/plots/strike_zone.jpg)
 
 
 ### Drawing the strike zone
@@ -441,8 +441,10 @@ for(i in unique(nh$num)){
 Now we will look at some some of the plots we saved as image.
 
                                                
-![atbat20](atbat20.png)  ![atbat29](atbat29.png)
-![atbat51](atbat51.png)  ![atbat59](atbat59.png)
+![atbat20](https://github.com/myselfHimanshu/Baseball-Pitches/blob/master/plots/atbat20.png)  
+![atbat29](https://github.com/myselfHimanshu/Baseball-Pitches/blob/master/plots/atbat29.png)
+![atbat51](https://github.com/myselfHimanshu/Baseball-Pitches/blob/master/plots/atbat51.png)  
+![atbat59](https://github.com/myselfHimanshu/Baseball-Pitches/blob/master/plots/atbat59.png)
 
 
 
